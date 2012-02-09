@@ -3,15 +3,15 @@
   (:gen-class))
 
 
-(defn match_infile[l]
+(defn match-infile[l]
   (if-let [m (re-matches #"^In file included from [^:]+:\d+(?::\d+)[,:]$" l)]
     (list l)))
 
-(defn match_hdr[l]
+(defn match-hdr[l]
   (if-let [[_ fname msg] (re-matches #"^([^:]+): (In .* ‘.*’|At .*):$" l)]
     (list fname, msg)))
 
-(defn match_we[l]
+(defn match-we[l]
   (defn parse-msg [msg]
     (if-let [[_ body flags] (re-matches #"^(.*) \[([^\[\]]+)\]$" msg)]
       (list body flags)
@@ -27,9 +27,9 @@
 
 (defn parse[build_log]
   (defn match[i l]
-    (or (if-let [m (match_we     l)] (list :msg    i m))
-        (if-let [m (match_hdr    l)] (list :in     i m))
-        (if-let [m (match_infile l)] (list :infile i m))))
+    (or (if-let [m (match-we     l)] (list :msg    i m))
+        (if-let [m (match-hdr    l)] (list :in     i m))
+        (if-let [m (match-infile l)] (list :infile i m))))
   (keep-indexed match build_log))
 
 
@@ -42,4 +42,9 @@
       (println (format "%03d%7s {%s}" l t (apply (fmt t) rec))))))
 
 (defn -main [& args]
-  (println "Welcome to my project! These are your args:" args))
+  (if-let [[fname] args]
+    (try (let [bl (ss/split-lines (slurp fname))
+               mm (parse bl)]
+           (pretty-print mm))
+         (catch java.io.FileNotFoundException e
+           (println "No such file:" fname)))))
