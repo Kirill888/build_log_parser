@@ -1,13 +1,16 @@
-# gccparse
+This is a small project I started primarily to learn Clojure.
 
-FIXME: write description
+The task is to extract compile warnings from the build log and present
+them in a more machine friendly formats (JSON or a database table).
+
+
 
 ## Usage
 
-FIXME: write
+It's not done yet, so...
 
 ## License
 
-Copyright (C) 2012 FIXME
+Copyright (C) 2012 Kirill Kouzoubov
 
 Distributed under the Eclipse Public License, the same as Clojure.
