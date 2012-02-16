@@ -2,47 +2,37 @@
   (:require [clojure.string :as ss])
   (:gen-class))
 
-(def gcc-msg-types
-  {"note"        :note
-   "warning"     :warning
-   "error"       :error
-   "fatal error" :fatal-error})
+(defn parse-int
+  ([x           ] (if x (Integer/parseInt x)         0))
+  ([x default-v ] (if x (Integer/parseInt x) default-v)))
 
-(defn match-infile[l]
-  (if-let [[_ f r] (re-matches #"^(?:In file included | +)from ([^:]+):(\d+)(?::\d+|)[,:]$" l)]
-    (list f (Integer/parseInt r))))
+(defn make-parser [form-map]
+  (defn parse-form [[re & funcs] l]
+    (if-let [[_ & mm] (re-matches re l)]
+      (map  (fn [f v] (f v)) funcs mm)))
+  (fn [label txt] (parse-form (form-map label) txt)))
 
-(defn match-hdr[l]
-  (if-let [[_ fname msg] (re-matches #"^([^:]+): (In .*|At .*):$" l)]
-    (list fname msg)))
-
-(defn match-inst[l]
-  (if-let [[_ fname r c from]
-           (re-matches #"^([^:]+):(\d+):(?:(\d+):|)   instantiated from (.*)$" l)]
-    (list fname
-          (Integer/parseInt r) (if c (Integer/parseInt c) 0)
-          from)))
-
-(defn match-we[l]
-  (defn parse-msg [msg]
-    (if-let [[_ body flags] (re-matches #"^(.*) \[([^\[\]]+)\]$" msg)]
-      (list body flags)
-      (list msg "")))
-
-  (if-let [[_ fname r c t msg]
-           (re-matches #"^([^:]+):(\d+):(?:(\d+):|) (note|warning|error|fatal error): (.*)$" l)]
-    (list* fname
-           (Integer/parseInt r) (if c (Integer/parseInt c) 0)
-           (gcc-msg-types t)
-           (parse-msg msg))))
+(def gcc-parse
+  (let [gcc-msg-types
+        {"note"        :note  "warning"     :warning
+         "error"       :error "fatal error" :fatal-error}
+        s identity, int parse-int]
+    (make-parser
+     {:msg    [#"^([^:]+):(\d+):(?:(\d+):|) (note|warning|error|fatal error): (.*?)(?: \[([^\[\]]+)\]|)$"
+                s int int gcc-msg-types s s]
+      :inst   [#"^([^:]+):(\d+):(?:(\d+):|)   instantiated from (.*)$" s int int s]
+      :in     [#"^([^:]+): (In .*|At .*):$" s s]
+      :infile [#"^(?:In file included | +)from ([^:]+):(\d+)(?::\d+|)[,:]$" s int]
+      })))
 
 (defn parse[build_log]
-  (defn match[i l]
-    (or (if-let [m (match-we      l)] (list :msg    i m))
-        (if-let [m (match-inst    l)] (list :inst   i m))
-        (if-let [m (match-hdr     l)] (list :in     i m))
-        (if-let [m (match-infile  l)] (list :infile i m))))
-  (keep-indexed match build_log))
+  (keep-indexed
+   (fn [i l]
+     (or (if-let [m (gcc-parse :msg    l)] (list :msg    i m))
+         (if-let [m (gcc-parse :inst   l)] (list :inst   i m))
+         (if-let [m (gcc-parse :in     l)] (list :in     i m))
+         (if-let [m (gcc-parse :infile l)] (list :infile i m))))
+   build_log))
 
 
 (defn pretty-print[mm]
@@ -50,7 +40,7 @@
              :in     (fn [fname msg] (format "%s:%s" fname msg))
              :inst   (fn [fname r c from] (format "%s:%d:%d (%s)" fname r c from))
              :msg    (fn [fname r c t msg st]
-                       (format "%s:%d:%d (%s)" fname r c msg))}]
+                       (format "%s:%d:%d%s (%s)" fname r c t msg))}]
     (doseq [[t l rec] mm]
       (println (format "%03d%7s {%s}" l t (apply (fmt t) rec))))))
 
